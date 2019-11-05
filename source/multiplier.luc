@@ -1,0 +1,17 @@
+module multiplier (
+    input a[16],                      //inputs and outputs of module
+    input b[16],
+    input alufn[6],
+    output out[16]
+  ) {
+
+  always {
+    out = 0;
+    case (alufn[1:0]){
+      2b10:
+       out = a * b;
+      2b11:
+        out = a / b;
+    }
+  }
+}

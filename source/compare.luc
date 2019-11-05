@@ -1,0 +1,23 @@
+module compare (
+    input alufn[3],
+    input z,
+    input v,
+    input n,
+    output result[16]
+  ) {
+  
+  sig holder;
+
+  always {
+    if (alufn[2] == 0 & alufn[1] == 1) {        // if ALUFN2 == 0 and ALUFN1 == 1, LSB = z
+      holder = z;
+    } else if (alufn[2] == 1 & alufn[1] == 0) { // if ALUFN2 == 1 and ALUFN1 == 0, LSB = n XOR v
+      holder = n ^ v;
+    } else {                                    // if ALUFN2 == 1 and ALUFN1 == 1, LSB = z OR n XOR v
+      holder = z | (n ^ v);
+    }
+    
+    result[0] = holder;
+    result[15:1] = 15b0;                        // connect bit 1 - 15 to ground
+  }
+}

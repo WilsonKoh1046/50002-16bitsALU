@@ -1,0 +1,28 @@
+module adder (
+    input a[16],  // clock
+    input b[16],  // reset
+    input alufn[6],
+    output sum[16],
+    output z,
+    output v,
+    output n
+  ) {
+
+  sig holder[16];
+  
+  always {
+    if (alufn[0] == 0) {
+      holder = a + b;
+      v = ((a[15] & b[15] & (~holder[15])) | (~a[15] & ~b[15] & (holder[15])));   // v = a.b._s + _a._b.s
+    } else {
+        holder = a - b;
+        v = ((a[15] & ~b[15] & (~holder[15])) | (~a[15] & b[15] & (holder[15]))); // subtract by computing negation of b
+    } 
+    sum = holder[15:0];
+    
+    z = ~|holder;                                         // z is true if all s outputs (holder here) are zero
+    
+    n = ~holder[15];                                          // n is tru if all s is negative
+    
+  }
+}
