@@ -1,0 +1,24 @@
+module compare (    //performs CMPEQ, CMPLT, CMPLE functions
+    input alufn[6],
+    input z,        // z from adder output
+    input v,        // v from adder output
+    input n,        // n from adder output
+    output cmp[16] //output sent to alu.luc
+  ) {
+sig holder; 
+  always {
+    case(alufn[2:1]){ 
+    b01:
+      holder = z; //LSB = z for equality
+    b10:
+      holder = n^v; //LSB = n XOR v for lesser than
+    b11:
+      holder = z | (n^v); //LSB = both above conditions for lesser than equal to
+    default:
+      holder = 0;
+  }
+    cmp=holder; // Setting LSB as first bit of the final output
+    
+
+}
+}

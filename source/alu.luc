@@ -1,0 +1,85 @@
+module alu (
+  input a[16],
+  input b[16],
+  input alufn[6],
+    
+  output alu[16],
+  output z,
+  output v,
+  output n,
+    
+  output overflow    
+  ) {
+  
+  adder add;
+  boolean boole;
+  compare comp;
+  shifter shift; 
+  multiplier mul; 
+
+  always {
+    add.a = a;
+    add.b = b;
+    add.alufn = alufn;
+    
+    boole.a = a;
+    boole.b = b;
+    boole.alufn = alufn;
+    comp.alufn = alufn;
+    comp.z = add.z;
+    comp.v = add.v;
+    comp.n = add.n;
+    shift.a = a;
+    shift.b = b;
+    shift.alufn = alufn;
+    mul.a = a;
+    mul.b = b;
+    mul.alufn = alufn;
+    overflow = add.overflow;
+    
+    case(alufn[5:4]){
+      2b00:  // adder circuit
+        alu = add.sum;
+        z = add.z;
+        v = add.v;
+        n = add.n;
+      2b01:  // boolean circuit
+        alu = boole.bool;
+        z = 0;
+        v = 0;
+        n = 0;
+      2b10:  // bitwise operator circuit
+        alu = shift.result;
+        z = 0;
+        v = 0;
+        n = 0;
+      2b11:  // comparator circuit
+        alu = comp.cmp;
+        z = 0;
+        v = 0;
+        n = 0;
+      default:
+        alu = 0;
+        z = 0;
+        v = 0;
+        n = 0;
+    }
+ }
+}    
+    
+          
+    /*if (alufn[4] == 0 && alufn[5] == 0) {
+        alu = add.sum;
+    } else if (alufn[5] == 0 && alufn[4] == 1) {
+        alu = boole.bool;
+    } else if (alufn[4] == 1 && alufn[5] == 0) {
+        alu = shift.result;
+    } else if (alufn[4] == 1 && alufn[5] == 1) {
+        alu = comp.cmp;
+    } else {
+        alu = 16b0;
+    }*/
+            
+   
+ 
+

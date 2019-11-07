@@ -1,0 +1,47 @@
+module boolean (
+    input alufn[4],  
+    input a[16],  
+    input b[16],
+    output bool[16]
+  ) {
+  //sig holder;
+
+  always {
+   case(alufn[3:0]){
+      // opcode value controls operation conducted
+      b1000: // AND
+        bool = a & b;
+      b1110: // OR
+        bool = a | b;
+      b0110: // XOR
+        bool = a ^ b;
+      b1010: // "A"
+        bool = a;
+      b1111: // NOR
+        bool = ~(a | b);
+      b1001: // NAND
+        bool = ~(a & b);
+      b0111: // XNOR
+        bool = ~(a ^ b);
+
+      default:
+        bool = a;
+  }
+}
+    
+    
+    /* if (a == 0 & b == 0) {        // if a == 0 and b == 0, ALUFN0 is the outcome
+      holder = alufn[0];
+    } else if (a == 1 & b == 0) { // if a == 1 and b == 0, ALUFN1 is the outcome 
+        holder = alufn[1];
+    } else if (a == 0 & b == 1) { // if a == 0 and b == 1, ALUFN2 is the outcome
+        holder = alufn[2];
+    } else {                      // if a == 1 and b == 1, ALUFN3 is the outcome
+        holder = alufn[3];
+    }
+    
+    bool = holder;
+      
+          
+  }*/
+}

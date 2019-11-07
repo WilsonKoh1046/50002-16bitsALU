@@ -1,0 +1,912 @@
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    output spi_miso,        // AVR SPI MISO
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    output avr_rx,          // AVR RX (FPGA TX)
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_dip [3][8]     // DIP switches on IO Shield
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+    
+    .rst(rst) {
+      dff count[30];
+      
+      fsm state = {START, CASEP_ADD, CASEP_SUBTRACT1, CASE_OVERFLOW_PPNA,
+      CASE_AND,CASE_OR,CASE_XOR,CASE_A,CASE_NOR,CASE_NAND,CASE_XNOR,
+      CASE_SHL,CASE_SHR,CASE_SRA,CASE_MUL,
+      CASE_CMPEQ,CASE_CMPLT,CASE_CMPLE1,CASE_CMPLE2,
+      ADDERERROR1, ADDERERROR2,ADDERERROR3,ADDERERROR4,ADDERERROR5,ADDERERROR6,
+      BOOLERROR1, BOOLERROR2, BOOLERROR3, BOOLERROR4, BOOLERROR5, BOOLERROR6, BOOLERROR7,
+      SHIFTERROR1, SHIFTERROR2, SHIFTERROR3, SHIFTERROR4,
+      COMPERROR1, COMPERROR2, COMPERROR3,COMPERROR4, END};
+      
+      multi_seven_seg seg; 
+    }
+  }
+  
+  
+  sig alufn[6]; //6-bit input alufn
+  sig alu[16]; //8-bit output of alu
+  const X = 28;
+  sig cmp1;
+  sig cmp2;
+  
+  alu alucall;   //alu module
+  
+  always {
+    
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset_cond
+    
+    spi_miso = bz;          // not using SPI
+    spi_channel = bzzzz;    // not using flags
+    avr_rx = bz;            // not using serial port
+    
+    io_led = 3x{{8h00}}; // turn off io leds
+    led[7:0] = 8h00;      // turning off LEDs on mojo board
+    io_seg = 8hff;          // turn segments off
+    io_sel = 4hf;           // select no digits
+    
+    seg.values = {5h0, 5h0, 5h0, 5h0};
+
+    alufn = io_dip[2][5:0]; // first 6-bits of left dip switch controls alufn
+
+    // assigning inputs and output of alu    
+    alucall.alufn = alufn; // alufn input
+    alucall.a = 16b0;
+    alucall.b = 16b0;
+    alu = alucall.alu; //alu module output
+    
+     
+
+    case (state.q) {
+      state.START: //normal functioning alu (without test)
+      count.d = 0; //clock counter is 0 when in START state
+        if (io_dip[2][7]){ //pressing first switch of right dip switches starts TEST states
+          state.d = state.CASEP_ADD; //transition to testing the alu
+        }
+        //io_sel = b0111; // select first digit
+        //io_seg = 7b10010; //display letter S
+        //start state
+        seg.values[3] = 5d05; // S 
+        seg.values[2] = 5d05; // S
+        seg.values[1] = 5d18; // .
+        seg.values[0] = 5d28; // . 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;   
+        
+      state.CASEP_ADD: //ADDER Test Case 1(Positive ADD):
+        io_seg = 8hff;          
+        io_sel = 4hf;          
+        alucall.alufn = 6b0;
+        alucall.a = 16b101; //5
+        alucall.b = 16b111; //7
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1; //increases clock counter until delay time is over
+        seg.values[3] = 5d10; // A 
+        seg.values[2] = 5d13; // d
+        seg.values[1] = 5d13; // d
+        seg.values[0] = 5d01; // 1 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1&&alu==16b1100){  //13 
+          count.d=0;
+          state.d = state.CASEP_SUBTRACT1; 
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu == 16b1100){ 
+          count.d=0; //reset counter value to 0                  
+          state.d=state.ADDERERROR1;   //move to adder error state
+        }
+        
+      state.ADDERERROR1: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d10; // A
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){         //once counter reaches defined value
+          count.d = 0;
+          state.d = state.CASEP_SUBTRACT1; //move to test the next unit
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+      
+      state.CASEP_SUBTRACT1: //ADDER Test Case 2(Positive SUB):
+        io_seg = 8hff;          
+        io_sel = 4hf;           
+        alucall.alufn = 6b1; 
+        alucall.a = 16b110; //6
+        alucall.b = 16b10; //2
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1; //increases clock counter until delay time is over
+        seg.values[3] = 5d05; // s
+        seg.values[2] = 5d03; // u
+        seg.values[1] = 5d11; // b
+        seg.values[0] = 5d01; // 1 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1&&alu==16b100){ //4
+          count.d=0;
+          state.d = state.CASE_OVERFLOW_PPNA; 
+        }
+        else if (count.q[X] == 1 && alu!= 16b100){
+          count.d=0;                 //reset counter value to 0
+          state.d=state.ADDERERROR2;   //move to adder error state
+        }
+        
+      state.ADDERERROR2: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d10; // A
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){         //once counter reaches defined value
+          count.d = 0;
+          state.d = state.CASE_OVERFLOW_PPNA; //move to test the next unit
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+        
+      state.CASE_OVERFLOW_PPNA:		//ADDER Test Case 3(Negative SUB2): -10-(+12) = -22 (Overflow)
+        io_seg = 8hff;          
+        io_sel = 4hf;           
+        alucall.alufn =6b000000; 
+        alucall.a = 16b0100000000000000;	//input a = -10
+        alucall.b = 16b0100000000000000;	//input b = 12
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;    //increases clock counter until delay time is over
+        seg.values[3] = 5d06; // p
+        seg.values[2] = 5d06; // p
+        seg.values[1] = 5d16; // n
+        seg.values[0] = 5d10; // A 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        io_led[2][7] = 1;   //overflow v=1                
+        if (count.q[X]==1&&alucall.overflow == 1){ //1111111111101010){ 
+          count.d=0;            
+          state.d = state.CASE_AND; 
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alucall.overflow != 1){ 
+          count.d=0; //reset counter value to 0
+          state.d=state.ADDERERROR3;   //move to adder error state
+        }
+      state.ADDERERROR3: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d10; // A
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){         //once counter reaches defined value
+          count.d = 0;
+          state.d = state.CASE_AND; //move to test the next unit
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }   
+      
+      state.CASE_AND: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b11000; 
+        alucall.a = 1111111111111111;	//input a
+        alucall.b = 0000000000000000;	//input b
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d10; // A
+        seg.values[2] = 5d16; // n
+        seg.values[1] = 5d13; // d
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==0000000000000000) { // Expected output
+          count.d=0;
+          state.d = state.CASE_OR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=0000000000000000) { // Expected output
+          count.d=0;
+          state.d=state.BOOLERROR1;
+        }
+        
+      state.BOOLERROR1: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_OR;
+        }
+            
+      state.CASE_OR: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits  
+        alucall.alufn =  6b011110; 
+        alucall.a = 16b0101;	//input a
+        alucall.b = 16b0011;	//input b
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d00; // o
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d08; // 0
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1 && alu == 16b0111){
+          count.d=0;
+          state.d = state.CASE_XOR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!= 16b0111){
+          count.d=0;
+          state.d=state.BOOLERROR2;
+        }
+       
+      state.BOOLERROR2: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_XOR;
+        }
+            
+      state.CASE_XOR: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b010110; 
+        alucall.a =16b0101;	//input a
+        alucall.b =  16b0011;	//input b
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn 
+        count.d = count.q+1;
+        seg.values[3] = 5d17; // X
+        seg.values[2] = 5d00; // o
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==16b0110) { // Expected output
+          count.d=0;
+          state.d = state.CASE_A;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=16b0110) { // Expected output
+          count.d=0;
+          state.d=state.BOOLERROR3;
+        }
+      
+      state.BOOLERROR3: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_A;
+        }
+          
+      state.CASE_A: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b11010; 
+        alucall.a = 16b11010100;
+        alucall.b = 16b00110011; // b can be any number
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d10; // A
+        seg.values[2] = 5d08; // 0
+        seg.values[1] = 5d08; // 0
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==16b11010100){
+          count.d=0;
+          state.d = state.CASE_NOR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!= 16b11010100){
+          count.d=0;
+          state.d=state.BOOLERROR4;
+        }
+          
+      state.BOOLERROR4: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_NOR;
+        }
+      
+        
+       state.CASE_NOR: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b11111; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d16; //  N
+        seg.values[2] = 5d0; //  0
+        seg.values[1] = 5d2; //  R
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==16b1111111111111000){
+          count.d=0;
+          state.d = state.CASE_NAND;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=16b1111111111111000){
+          count.d=0;
+          state.d=state.BOOLERROR5;
+        }
+          
+      state.BOOLERROR5: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_NAND;
+        } 
+        
+      state.CASE_NAND: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b011001; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d16; //  N
+        seg.values[2] = 5d10; //  A
+        seg.values[1] = 5d16; //  N
+        seg.values[0] = 5d13; //  D 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==16b1111111111111110){
+          count.d=0;
+          state.d = state.CASE_XNOR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=16b1111111111111110){
+          count.d=0;
+          state.d=state.BOOLERROR6;
+        }
+          
+      state.BOOLERROR6: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_XNOR;
+        }   
+        
+      state.CASE_XNOR: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b010111; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d17; // X
+        seg.values[2] = 5d16; // N
+        seg.values[1] = 5d0; // O
+        seg.values[0] = 5d2; // R  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1 && alu==16b1111111111111001){
+          count.d=0;
+          state.d = state.CASE_SHL;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=16b1111111111111001){
+          count.d=0;
+          state.d=state.BOOLERROR7;
+        }
+          
+      state.BOOLERROR7: //BOOLEAN ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d11; // b  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_SHL;
+        }   
+        
+     
+      state.CASE_SHL: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b100000; 
+        alucall.a = 16b1010;	//input a
+        alucall.b = 16b111;	//input b (shifting 8 bit)
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d05; // S
+        seg.values[2] = 5d17; // H
+        seg.values[1] = 5d04; // L
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&&alu== 16b10100000000) {
+          count.d=0;
+          state.d = state.CASE_SHR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!= 16b10100000000) {
+          count.d=0;
+          state.d=state.SHIFTERROR1;
+        }
+      
+      state.SHIFTERROR1: //SHIFTER ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d05; // s
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_SHR;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+        
+        
+            
+      state.CASE_SHR: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b100001; 
+        alucall.a = 16b10100000000;	//input a
+        alucall.b = 16b111;	//input b (shifting 8 bit)
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d05; // S
+        seg.values[2] = 5d17; // H
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&&alu==16b1010) {
+          count.d=0;
+          state.d = state.CASE_SRA;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!= 16b1010) {
+          count.d=0;
+          state.d=state.SHIFTERROR2;
+        }
+      
+      state.SHIFTERROR2: //SHIFTER ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d05; // s
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_SRA;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+        
+            
+      state.CASE_SRA:
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b100011; 
+        alucall.a = 16b10100000000;	//input a
+        alucall.b = 16b111;	//input b (shifting 4 bit)
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d05; // S
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d10; // A
+        seg.values[0] = 5d08; // 0  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&&alu==16b1010) {
+          count.d=0;
+          state.d = state.CASE_MUL;
+        }  
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=16b1010) {
+          count.d=0;
+          state.d=state.SHIFTERROR3;
+        }
+      
+      state.SHIFTERROR3: //SHIFTER ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d05; // s
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_MUL;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+
+      state.CASE_MUL:
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b100010; 
+        alucall.a = 0000000000000010;	//input a = 2
+        alucall.b = 0000000000000010;	//input b = 2 , (a*2)
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d16; // n
+        seg.values[2] = 5d16; // n
+        seg.values[1] = 5d03; // U
+        seg.values[0] = 5d04; // L  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&&alu==0000000000000100) { //4
+          count.d=0;
+          state.d = state.CASE_CMPEQ;
+        }  
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!=0000000000000100) {
+          count.d=0;
+          state.d=state.SHIFTERROR4;
+        }
+      
+      
+        
+      state.SHIFTERROR4: //SHIFTER ERROR
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E 
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d05; // s
+        io_seg=~seg.seg;
+        io_sel=~seg.sel; 
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_CMPEQ;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+        
+              
+        
+      state.CASE_CMPEQ: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn = 6b110011;
+        alucall.a = 16b10110100;
+        alucall.b = 16b10110100;
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d12; // C
+        seg.values[2] = 5d00; // 0
+        seg.values[1] = 5d06; // P
+        seg.values[0] = 5d01; // 1  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1&&alu==16b1){
+          count.d=0;
+          state.d = state.CASE_CMPLT;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }  
+        else if (count.q[X] == 1 && alu!= 16b1){
+          count.d=0;
+          state.d=state.COMPERROR1;
+        }
+      
+       state.COMPERROR1: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d12; // C  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.CASE_CMPLT;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        } 
+        
+        
+          
+      state.CASE_CMPLT: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn =6b110101;		//CMPEQ operation of ALU
+        alucall.a = 16b01;	//input a = 1
+        alucall.b = 16b11;	//input b = 2
+        alu = alucall.alu; 
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d12; // C
+        seg.values[2] = 5d00; // 0
+        seg.values[1] = 5d06; // P
+        seg.values[0] = 5d22; // 2  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&&alu==16b0){
+          count.d=0;
+          state.d = state.CASE_CMPLE1; 
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 && alu!= 16b0){
+          count.d=0;
+          state.d=state.COMPERROR2;
+        }
+      
+      state.COMPERROR2: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d12; // C  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.END;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.CASE_CMPLE1;
+        } 
+          
+           
+      state.CASE_CMPLE1: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn =  6b110111;		//CMPLT operation of ALU
+        alucall.a =16b111;	//input a = 8
+        alucall.b =16b111;	//input b = 16
+        alu = alucall.alu;
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d12; // C
+        seg.values[2] = 5d00; // 0
+        seg.values[1] = 5d06; // P
+        seg.values[0] = 5d30; // 3  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&& (alu == 16b1)) { // Expected output
+          count.d=0;
+          state.d = state.CASE_CMPLE2;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 &&  ! (alu == 16b1)) { // Expected output
+          count.d=0;
+          state.d=state.COMPERROR3;
+        }
+         
+      state.COMPERROR3: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d12; // C  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.END;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.CASE_CMPLE2;
+        }
+      
+      state.CASE_CMPLE2: 
+        io_seg = 8hff;          // turn segments off
+        io_sel = 4hf;           // select no digits
+        alucall.alufn =  6b110111;		//CMPLT operation of ALU
+        alucall.a =16b101;	//input a = 8
+        alucall.b =16b111;	//input b = 16
+        alu = alucall.alu;
+        io_led[1] = alucall.alu[15:8]; // middle leds show output alufn 
+        io_led[0] = alucall.alu[7:0]; // right leds show output alufn
+        count.d = count.q+1;
+        seg.values[3] = 5d12; // C
+        seg.values[2] = 5d00; // 0
+        seg.values[1] = 5d06; // P
+        seg.values[0] = 5d18; // .  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X] ==1&& (alu == 16b0)) { // Expected output
+          count.d=0;
+          state.d = state.END;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+        else if (count.q[X] == 1 &&  ! (alu == 16b0)) { // Expected output
+          count.d=0;
+          state.d=state.COMPERROR4;
+        }
+         
+      state.COMPERROR4: 
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d02; // r
+        seg.values[1] = 5d02; // r
+        seg.values[0] = 5d12; // C  
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.END;
+        }
+        else if (io_dip[2][7] == 0){
+          count.d = 0;
+          state.d=state.END;
+        }
+            
+      state.END:                //DONE WITH TEST
+        count.d = count.q+1;
+        seg.values[3] = 5d14; // E
+        seg.values[2] = 5d16; // n
+        seg.values[1] = 5d13; // d
+        seg.values[0] = 5d18; // ¡£ 
+        io_seg=~seg.seg;
+        io_sel=~seg.sel;
+        if (count.q[X]==1){
+          count.d = 0;
+          state.d = state.START;//return to startstate
+        }
+       
+    }
+    
+}
+}
