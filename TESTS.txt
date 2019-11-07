@@ -1,0 +1,145 @@
+
+      state.CASEP_ADD: //ADDER Test Case 1(Positive ADD):       
+        alucall.alufn = 6b0;
+        alucall.a = 16b101; //5
+        alucall.b = 16b111; //7
+        alu = alucall.alu;  
+        alu==16b1100){  //13 
+
+      
+      state.CASEP_SUBTRACT1: //ADDER Test Case 2(Positive SUB):           
+        alucall.alufn = 6b1; 
+        alucall.a = 16b110; //6
+        alucall.b = 16b10; //2
+        alu = alucall.alu; 
+        alu==16b100){ //4
+ 
+        
+      state.CASE_OVERFLOW_PPNA: //ADDER Test Case 3 (Overflow)
+        alucall.alufn =6b000000; 
+        alucall.a = 16b0100000000000000;	
+        alucall.b = 16b0100000000000000;	
+        alu = alucall.alu; 
+        alucall.overflow == 1)
+        
+      
+      state.CASE_AND: 
+        alucall.alufn = 6b11000; 
+        alucall.a = 1111111111111111;	//input a
+        alucall.b = 0000000000000000;	//input b
+        alu = alucall.alu; 
+        alu==0000000000000000) { // Expected output
+        
+        
+    
+      state.CASE_OR: 
+        alucall.alufn =  6b011110; 
+        alucall.a = 16b0101;	//input a
+        alucall.b = 16b0011;	//input b
+        alu = alucall.alu; 
+        alu == 16b0111){
+        
+            
+      state.CASE_XOR: 
+        alucall.alufn = 6b010110; 
+        alucall.a =16b0101;	//input a
+        alucall.b =  16b0011;	//input b
+        alu = alucall.alu; 
+        alu==16b0110) { // Expected output
+        
+          
+      state.CASE_A: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        alucall.alufn = 6b11010; 
+        alucall.a = 16b11010100;
+        alucall.b = 16b00110011; // b can be any number
+        alu = alucall.alu; 
+        alu==16b11010100){
+        
+      
+        
+       state.CASE_NOR: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        alucall.alufn = 6b11111; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        alu==16b1111111111111000){
+        
+        
+      state.CASE_NAND: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        alucall.alufn = 6b011001; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        alu==16b1111111111111110){
+        
+        
+      state.CASE_XNOR: //BOOLEAN Test case 4("A"LDR): 8b11010100
+        alucall.alufn = 6b010111; 
+        alucall.a = 16b0101;
+        alucall.b = 16b0011; // b can be any number
+        alu = alucall.alu; 
+        alu==16b1111111111111001){
+     
+     
+      state.CASE_SHL: 
+        alucall.alufn = 6b100000; 
+        alucall.a = 16b1010;	//input a
+        alucall.b = 16b111;	//input b (shifting 8 bit)
+        alu = alucall.alu; 
+        alu== 16b10100000000) {
+        
+            
+      state.CASE_SHR: 
+        alucall.alufn = 6b100001; 
+        alucall.a = 16b10100000000;	//input a
+        alucall.b = 16b111;	//input b (shifting 8 bit)
+        alu = alucall.alu; 
+        alu==16b1010) {
+     
+        
+            
+      state.CASE_SRA:
+        alucall.alufn = 6b100011; 
+        alucall.a = 16b10100000000;	//input a
+        alucall.b = 16b111;	//input b (shifting 4 bit)
+        alu = alucall.alu; 
+        alu==16b1010) {
+       
+      state.CASE_MUL:
+        alucall.alufn = 6b100010; 
+        alucall.a = 0000000000000010;	//input a = 2
+        alucall.b = 0000000000000010;	//input b = 2 , (a*2)
+        alu = alucall.alu; 
+        alu==0000000000000100)
+      
+
+      state.CASE_CMPEQ: 
+        alucall.alufn = 6b110011;
+        alucall.a = 16b10110100;
+        alucall.b = 16b10110100;
+        alu = alucall.alu; 
+        alu==16b1){
+
+          
+      state.CASE_CMPLT: 
+        alucall.alufn =6b110101;		//CMPEQ operation of ALU
+        alucall.a = 16b01;	//input a = 1
+        alucall.b = 16b11;	//input b = 2
+        alu = alucall.alu; 
+        alu==16b0){
+        
+          
+           
+      state.CASE_CMPLE1: 
+        alucall.alufn =  6b110111;		//CMPLT operation of ALU
+        alucall.a =16b111;	//input a = 8
+        alucall.b =16b111;	//input b = 16
+        alu = alucall.alu;
+        alu == 16b1
+      
+      state.CASE_CMPLE2: 
+        alucall.alufn =  6b110111;		//CMPLT operation of ALU
+        alucall.a =16b101;	//input a = 8
+        alucall.b =16b111;	//input b = 16
+        alu = alucall.alu;
+        alu == 16b0
